@@ -122,9 +122,9 @@ class JaxrsApiSpecParser(val _hostClass: Class[_], _apiVersion: String, _swagger
     ignoreParam
   }
 
-  override def getPath(method: Method): String = {
+  override def getPath(method: Method, basePath: String = null): String = {
     val wsPath = method.getAnnotation(classOf[javax.ws.rs.Path])
-    val path = apiEndpoint.value + JaxrsApiReader.FORMAT_STRING + (if (wsPath == null) "" else wsPath.value)
+    val path = apiEndpoint.value + JaxrsApiReader.FORMAT_STRING + (if (basePath == null) "" else basePath) + (if (wsPath == null) "" else wsPath.value)
     path
   }
 

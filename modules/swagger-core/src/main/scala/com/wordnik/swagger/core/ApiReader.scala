@@ -49,7 +49,7 @@ trait ApiSpecParserTrait extends BaseApiParser {
   def swaggerVersion: String
   def basePath: String
   def resourcePath: String
-  def getPath(method: Method): String
+  def getPath(method: Method, basePath: String = null): String
   def processParamAnnotations(docParam: DocumentationParameter, paramAnnotations: Array[Annotation], method: Method): Boolean
 
   val TRAIT = "trait"
@@ -84,7 +84,7 @@ trait ApiSpecParserTrait extends BaseApiParser {
     docParam.paramAccess = readString(apiParam.access)
   }
 
-  def parseMethod(method: Method): Any = {
+  def parseMethod(method: Method, basePath: String = null, parentMethods: List[Method] = Nil): Any = {
     val apiOperation = method.getAnnotation(classOf[ApiOperation])
     val apiErrors = method.getAnnotation(classOf[ApiErrors])
     val isDeprecated = method.getAnnotation(classOf[Deprecated])
@@ -160,9 +160,9 @@ trait ApiSpecParserTrait extends BaseApiParser {
       }
 
       // Read the params and add to Operation
-      val paramAnnotationDoubleArray = method.getParameterAnnotations
-      val paramTypes = method.getParameterTypes
-      val genericParamTypes = method.getGenericParameterTypes
+      val paramAnnotationDoubleArray = if(parentMethods.isEmpty) method.getParameterAnnotations else parentMethods.map(pm => pm.getParameterAnnotations).reduceRight(_ ++ _) ++ method.getParameterAnnotations
+      val paramTypes = if(parentMethods.isEmpty) method.getParameterTypes else parentMethods.map(pm => pm.getParameterTypes).reduceRight(_ ++ _) ++ method.getParameterTypes
+      val genericParamTypes = if(parentMethods.isEmpty) method.getGenericParameterTypes else parentMethods.map(pm => pm.getGenericParameterTypes).reduceRight(_ ++ _) ++ method.getGenericParameterTypes
       var counter = 0
       var ignoreParam = false
       paramAnnotationDoubleArray.foreach(paramAnnotations => {
@@ -182,7 +182,7 @@ trait ApiSpecParserTrait extends BaseApiParser {
         }
 
         ignoreParam = processParamAnnotations(docParam, paramAnnotations, method)
-
+        
         if (paramAnnotations.length == 0) {
           ignoreParam = true
         }
@@ -195,7 +195,7 @@ trait ApiSpecParserTrait extends BaseApiParser {
       })
 
       // Get Endpoint
-      val docEndpoint = getEndPoint(documentation, getPath(method))
+      val docEndpoint = getEndPoint(documentation, getPath(method, basePath))
 
       // Add Operation to Endpoint
       docEndpoint.addOperation(processOperation(method, docOperation))
@@ -210,7 +210,18 @@ trait ApiSpecParserTrait extends BaseApiParser {
           docOperation.addErrorResponse(docError)
         }
       }
-    } else LOGGER.debug("skipping method " + method.getName)
+    } else {
+    	val apiResource = method.getAnnotation(classOf[ApiResource])	
+    	if(apiResource != null) {
+    		try {
+                val cls = SwaggerContext.loadClass(apiResource.resourceClass())
+                //TODO this needs to pass forward the param annotations from the parent method(s). Perhaps it should just pass the method itself ?
+	    		cls.getMethods.foreach(resourceMethod => parseMethod(resourceMethod, apiResource.value(), method :: parentMethods))
+            } catch {
+                case e: ClassNotFoundException => LOGGER.debug("skipping method {} as resourceClass {} was not found", method.getName, apiResource.resourceClass()) 
+            }      
+    	} else LOGGER.debug("skipping method " + method.getName) 
+    }
   }
 
   protected def processOperation(method: Method, o: DocumentationOperation) = o

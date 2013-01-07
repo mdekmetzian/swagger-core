@@ -89,7 +89,9 @@ trait ApiSpecParserTrait extends BaseApiParser {
     val apiErrors = method.getAnnotation(classOf[ApiErrors])
     val isDeprecated = method.getAnnotation(classOf[Deprecated])
 
-    LOGGER.debug("parsing method " + method.getName)
+    if(LOGGER.isDebugEnabled())
+    	LOGGER.debug("parsing method {} with basePath {} and parentMethods {}", Array(method.getName, basePath, if(parentMethods.isEmpty) "Nil" else  parentMethods.map(x => x.getName).mkString))
+    	
     if (apiOperation != null && method.getName != "getHelp") {
       // Read the Operation
       val docOperation = new DocumentationOperation
@@ -215,8 +217,7 @@ trait ApiSpecParserTrait extends BaseApiParser {
     	if(apiResource != null) {
     		try {
                 val cls = SwaggerContext.loadClass(apiResource.resourceClass())
-                //TODO this needs to pass forward the param annotations from the parent method(s). Perhaps it should just pass the method itself ?
-	    		cls.getMethods.foreach(resourceMethod => parseMethod(resourceMethod, apiResource.value(), method :: parentMethods))
+	    		cls.getMethods.foreach(resourceMethod => parseMethod(resourceMethod, (if(basePath != null) basePath else "") + apiResource.value(), method :: parentMethods))
             } catch {
                 case e: ClassNotFoundException => LOGGER.debug("skipping method {} as resourceClass {} was not found", method.getName, apiResource.resourceClass()) 
             }      
